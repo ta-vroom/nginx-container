@@ -10,10 +10,9 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: "${{ github.event.repository.name }}"  # the name of the image produced by this build, matches repo names
-  IMAGE_DESC: "DMFL"
+  IMAGE_NAME: "angie"  # the name of the image produced by this build, matches repo names
+  IMAGE_DESC: "Angie derived container image"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"  # do not edit
-  ARTIFACTHUB_LOGO_URL: "https://avatars.githubusercontent.com/u/120078124?s=200&v=4"  # You should put your own image here so that you get a fancy profile image on https://artifacthub.io/!
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
@@ -82,9 +81,6 @@ jobs:
         run: |
             apt get update && apt-get install -y buildah
             buildah from --name ${{ env.IMAGE_NAME }} alpine:3:19
-            buildah config \
-                --label 'org.opencontainers.image.authors=Release Engineering Team <devops@tech.wbsrv.ru>'
-                ${{ env.IMAGE_NAME }}
 
             buildah run ${{ env.IMAGE_NAME }} -- apk add --no-cache ca-certificates curl
             buildah run ${{ env.IMAGE_NAME }} -- curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa
