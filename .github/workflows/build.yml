@@ -79,7 +79,7 @@ jobs:
       - name: Build Image
         id: build_image
         run: |
-            apt get update && apt-get install -y buildah
+            apt-get update && apt-get install -y buildah
             buildah from --name ${{ env.IMAGE_NAME }} alpine:3:19
 
             buildah run ${{ env.IMAGE_NAME }} -- apk add --no-cache ca-certificates curl
