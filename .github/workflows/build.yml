@@ -89,7 +89,7 @@ jobs:
             buildah run ${{ env.IMAGE_NAME }} -- apk add --no-cache ca-certificates curl
             buildah run ${{ env.IMAGE_NAME }} -- curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa
             buildah run ${{ env.IMAGE_NAME }} -- echo "https://download.angie.software/angie/alpine/v$(egrep -o "[0-9]+\.[0-9]+" /etc/alpine-release)/main" >> /etc/apk/repositories
-            buildah run ${{ env.IMAGE_NAME }} -- apk add --no-cache angie angie-module-geoip2 angie-module-njs
+            buildah run ${{ env.IMAGE_NAME }} -- apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua
             buildah run ${{ env.IMAGE_NAME }} -- rm /etc/apk/keys/angie-signing.rsa
             buildah run ${{ env.IMAGE_NAME }} -- ln -sf /dev/stdout /var/log/angie/access.log
             buildah run ${{ env.IMAGE_NAME }} -- ln -sf /dev/stderr /var/log/angie/error.log
