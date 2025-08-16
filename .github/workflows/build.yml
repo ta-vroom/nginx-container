@@ -79,7 +79,7 @@ jobs:
       - name: Build Image
         id: build_image
         run: |
-            buildah from --name ${{ env.IMAGE_NAME }} alpine:3:19
+            buildah from --name ${{ env.IMAGE_NAME }} --platform=linux/amd64 --pull docker://docker.io/alpine:3:19
 
             buildah run ${{ env.IMAGE_NAME }} -- apk add --no-cache ca-certificates curl
             buildah run ${{ env.IMAGE_NAME }} -- curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa
