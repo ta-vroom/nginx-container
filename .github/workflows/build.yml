@@ -82,15 +82,15 @@ jobs:
         run: |
             buildah from --name ${{ env.IMAGE_NAME }} --platform=linux/amd64 --pull docker://docker.io/alpine:${{ env.ALPINE_VERSION }}
             
-            alias BUILD="buildah run ${{ env.IMAGE_NAME }} sh -c"
-            
-            BUILD "apk add --no-cache ca-certificates curl"
-            BUILD "curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa"
-            BUILD 'echo "https://download.angie.software/angie/alpine/v${{ env.ALPINE_VERSION }}/main" >> /etc/apk/repositories'
-            BUILD "apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua"
-            BUILD "rm /etc/apk/keys/angie-signing.rsa"
-            BUILD "ln -sf /dev/stdout /var/log/angie/access.log"
-            BUILD "ln -sf /dev/stderr /var/log/angie/error.log"
+            BUILD="buildah run ${{ env.IMAGE_NAME }} sh -c"
+
+            $BUILD "apk add --no-cache ca-certificates curl"
+            $BUILD "curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa"
+            $BUILD 'echo "https://download.angie.software/angie/alpine/v${{ env.ALPINE_VERSION }}/main" >> /etc/apk/repositories'
+            $BUILD "apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua"
+            $BUILD "rm /etc/apk/keys/angie-signing.rsa"
+            $BUILD "ln -sf /dev/stdout /var/log/angie/access.log"
+            $BUILD "ln -sf /dev/stderr /var/log/angie/error.log"
 
             buildah config --port 80 --port 443 ${{ env.IMAGE_NAME }}
             buildah config --cmd '["angie", "-g", "daemon off;"]' ${{ env.IMAGE_NAME }}
