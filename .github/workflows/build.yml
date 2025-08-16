@@ -76,24 +76,86 @@ jobs:
             io.artifacthub.package.prerelease=false
           sep-tags: " "
           sep-annotations: " "
+      - name: Build Crowdsec
+        id: crowdsec
+        run: |
+          IMGNAME="crowdsec-nginx-bouncer"
+          CSNB_VER="v1.1.3"
 
-      - name: Build Image
+          # Create build container
+          ctr=$(buildah from --platform="${BUILDPLATFORM:-linux/amd64}" alpine:3.22.1)
+
+          # Set up workdir
+          buildah config --workingdir /src $ctr
+          buildah config --shell '["/bin/ash", "-eo", "pipefail", "-c"]' $ctr
+
+          # Upgrade base + install build deps
+          buildah run $ctr -- apk upgrade --no-cache -a
+          buildah run $ctr -- apk add --no-cache ca-certificates git build-base
+
+          # Clone and build
+          buildah run $ctr -- git clone --recursive https://github.com/crowdsecurity/cs-nginx-bouncer --branch "$CSNB_VER" /src
+          buildah run $ctr -- make -C /src
+
+          # Unpack tgz + rename dir
+          buildah run $ctr -- sh -c 'tar xzf /src/crowdsec-nginx-bouncer.tgz && mv /src/crowdsec-nginx-bouncer-* /src/crowdsec-nginx-bouncer'
+
+          # Patch configs
+          buildah run $ctr -- sed -i "/lua_package_path/d" /src/crowdsec-nginx-bouncer/nginx/crowdsec_nginx.conf
+          buildah run $ctr -- sed -i "/lua_ssl_trusted_certificate/d" /src/crowdsec-nginx-bouncer/nginx/crowdsec_nginx.conf
+          buildah run $ctr -- sed -i "s|/etc/crowdsec/bouncers/crowdsec-nginx-bouncer.conf|/data/crowdsec/crowdsec.conf|g" /src/crowdsec-nginx-bouncer/nginx/crowdsec_nginx.conf
+          buildah run $ctr -- sed -i "s|crowdsec-nginx-bouncer|crowdsec-npmplus-bouncer|g" /src/crowdsec-nginx-bouncer/nginx/crowdsec_nginx.conf
+
+          # Patch lua-mod config_example.conf
+          conf="/src/crowdsec-nginx-bouncer/lua-mod/config_example.conf"
+          buildah run $ctr -- sed -i "s|API_KEY=.*|API_KEY=|g" "$conf"
+          buildah run $ctr -- sed -i "s|ENABLED=.*|ENABLED=false|g" "$conf"
+          buildah run $ctr -- sed -i "s|API_URL=.*|API_URL=http://127.0.0.1:8080|g" "$conf"
+          buildah run $ctr -- sed -i "s|BAN_TEMPLATE_PATH=.*|BAN_TEMPLATE_PATH=/data/crowdsec/ban.html|g" "$conf"
+          buildah run $ctr -- sed -i "s|CAPTCHA_TEMPLATE_PATH=.*|CAPTCHA_TEMPLATE_PATH=/data/crowdsec/captcha.html|g" "$conf"
+          buildah run $ctr -- sed -i "s|APPSEC_URL=.*|APPSEC_URL=http://127.0.0.1:7422|g" "$conf"
+          buildah run $ctr -- sed -i "s|APPSEC_FAILURE_ACTION=.*|APPSEC_FAILURE_ACTION=deny|g" "$conf"
+          buildah run $ctr -- sed -i "s|REQUEST_TIMEOUT=.*|REQUEST_TIMEOUT=2500|g" "$conf"
+          buildah run $ctr -- sed -i "s|APPSEC_CONNECT_TIMEOUT=.*|APPSEC_CONNECT_TIMEOUT=1000|g" "$conf"
+          buildah run $ctr -- sed -i "s|APPSEC_SEND_TIMEOUT=.*|APPSEC_SEND_TIMEOUT=30000|g" "$conf"
+          buildah run $ctr -- sed -i "s|APPSEC_PROCESS_TIMEOUT=.*|APPSEC_PROCESS_TIMEOUT=10000|g" "$conf"
+
+          # Commit image
+          buildah commit $ctr $IMGNAME
+
+      - name: Build Angie
         id: build_image
         run: |
             buildah from --name ${{ env.IMAGE_NAME }} --platform=linux/amd64 --pull docker://docker.io/alpine:${{ env.ALPINE_VERSION }}
             
-            BUILD="buildah run ${{ env.IMAGE_NAME }} sh -c"
+            BRS="buildah run ${{ env.IMAGE_NAME }} sh -c"
 
-            $BUILD "apk add --no-cache ca-certificates curl"
-            $BUILD "curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa"
-            $BUILD 'echo "https://download.angie.software/angie/alpine/v${{ env.ALPINE_VERSION }}/main" >> /etc/apk/repositories'
-            $BUILD "apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua"
-            $BUILD "rm /etc/apk/keys/angie-signing.rsa"
-            $BUILD "ln -sf /dev/stdout /var/log/angie/access.log"
-            $BUILD "ln -sf /dev/stderr /var/log/angie/error.log"
+            $BRS "apk add --no-cache ca-certificates curl"
+            $BRS "curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa"
+            $BRS 'echo "https://download.angie.software/angie/alpine/v${{ env.ALPINE_VERSION }}/main" >> /etc/apk/repositories'
+            $BRS "apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua"
+            $BRS "apk add --no-cache lua5.1 luarocks lua5.1-cjson"
+            $BRS "apk add --no-cache gettext"
+            $BRS "rm /etc/apk/keys/angie-signing.rsa"
+            $BRS "ln -sf /dev/stdout /var/log/angie/access.log"
+            $BRS "ln -sf /dev/stderr /var/log/angie/error.log"
 
             buildah config --port 80 --port 443 ${{ env.IMAGE_NAME }}
             buildah config --cmd '["angie", "-g", "daemon off;"]' ${{ env.IMAGE_NAME }}
+
+            
+            # Make sure target dirs exist
+            buildah run ${{env.IMAGE_NAME}} -- mkdir -p /usr/local/nginx/conf/conf.d/include
+            buildah run ${{env.IMAGE_NAME}} -- mkdir -p /usr/local/nginx/lib/lua
+
+            # Copy files from builder
+            buildah copy --from=crowdsec-nginx-bouncer ${{env.IMAGE_NAME}} /src/crowdsec-nginx-bouncer/nginx/crowdsec_nginx.conf      /usr/local/nginx/conf/conf.d/include/crowdsec_nginx.conf
+            buildah copy --from=crowdsec-nginx-bouncer ${{env.IMAGE_NAME}} /src/crowdsec-nginx-bouncer/lua-mod/config_example.conf    /usr/local/nginx/conf/conf.d/include/crowdsec.conf
+            buildah copy --from=crowdsec-nginx-bouncer ${{env.IMAGE_NAME}} /src/crowdsec-nginx-bouncer/lua-mod/templates/captcha.html /usr/local/nginx/conf/conf.d/include/captcha.html
+            buildah copy --from=crowdsec-nginx-bouncer ${{env.IMAGE_NAME}} /src/crowdsec-nginx-bouncer/lua-mod/templates/ban.html     /usr/local/nginx/conf/conf.d/include/ban.html
+            buildah copy --from=crowdsec-nginx-bouncer ${{env.IMAGE_NAME}} /src/crowdsec-nginx-bouncer/lua-mod/lib/crowdsec.lua       /usr/local/nginx/lib/lua/crowdsec.lua
+            buildah copy --from=crowdsec-nginx-bouncer ${{env.IMAGE_NAME}} /src/crowdsec-nginx-bouncer/lua-mod/lib/plugins            /usr/local/nginx/lib/lua/plugins
+            
             for tag in ${{ steps.metadata.outputs.tags }}; do
               buildah commit ${{ env.IMAGE_NAME }} angie:$tag
             done
