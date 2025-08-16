@@ -12,6 +12,7 @@ on:
 env:
   IMAGE_NAME: "angie"  # the name of the image produced by this build, matches repo names
   IMAGE_DESC: "Angie derived container image"
+  ALPINE_VERSION: "3.19"
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"  # do not edit
 
 concurrency:
@@ -79,16 +80,18 @@ jobs:
       - name: Build Image
         id: build_image
         run: |
-            buildah from --name ${{ env.IMAGE_NAME }} --platform=linux/amd64 --pull docker://docker.io/alpine:3.19
+            buildah from --name ${{ env.IMAGE_NAME }} --platform=linux/amd64 --pull docker://docker.io/alpine:${{ env.ALPINE_VERSION }}
+            
+            alias BUILD="buildah run ${{ env.IMAGE_NAME }} sh -c"
+            
+            BUILD "apk add --no-cache ca-certificates curl"
+            BUILD "curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa"
+            BUILD 'echo "https://download.angie.software/angie/alpine/v${{ env.ALPINE_VERSION }}/main" >> /etc/apk/repositories'
+            BUILD "apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua"
+            BUILD "rm /etc/apk/keys/angie-signing.rsa"
+            BUILD "ln -sf /dev/stdout /var/log/angie/access.log"
+            BUILD "ln -sf /dev/stderr /var/log/angie/error.log"
 
-            buildah run ${{ env.IMAGE_NAME }} sh -c "apk add --no-cache ca-certificates curl"
-            buildah run ${{ env.IMAGE_NAME }} sh -c "curl -o /etc/apk/keys/angie-signing.rsa https://angie.software/keys/angie-signing.rsa"
-            #buildah run ${{ env.IMAGE_NAME }} sh -c "mkdir -p /etc/apk"
-            buildah run ${{ env.IMAGE_NAME }} sh -c 'echo "https://download.angie.software/angie/alpine/v$(grep -oE "[0-9]+\.[0-9]+" /etc/alpine-release)/main" >> /etc/apk/repositories'
-            buildah run ${{ env.IMAGE_NAME }} sh -c "apk add --no-cache angie angie-module-geoip2 angie-module-njs angie-module-lua"
-            buildah run ${{ env.IMAGE_NAME }} sh -c "rm /etc/apk/keys/angie-signing.rsa"
-            buildah run ${{ env.IMAGE_NAME }} sh -c "ln -sf /dev/stdout /var/log/angie/access.log"
-            buildah run ${{ env.IMAGE_NAME }} sh -c "ln -sf /dev/stderr /var/log/angie/error.log"
             buildah config --port 80 --port 443 ${{ env.IMAGE_NAME }}
             buildah config --cmd '["angie", "-g", "daemon off;"]' ${{ env.IMAGE_NAME }}
             buildah commit ${{ env.IMAGE_NAME }} angie:latest
