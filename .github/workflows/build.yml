@@ -167,8 +167,8 @@ jobs:
 
       - name: Sign image with cosign
         env:
-          COSIGN_EXPERIMENTAL: false
-          SIGN_KEY: ${{ secrets.PRIV_KEY }}
+          COSIGN_EXPERIMENTAL: true
+          #SIGN_KEY: ${{ secrets.PRIV_KEY }}
         run: |
           IMAGE_FULL="${{ steps.registry_case.outputs.lowercase }}/${{ steps.image_case.outputs.lowercase }}"
           DIGEST=$(skopeo inspect docker://$IMAGE_FULL --format '{{.Digest}}')
@@ -179,4 +179,4 @@ jobs:
           fi
 
           echo "Signing image: $IMAGE_FULL@$DIGEST"
-          cosign sign -y --key env://SIGN_KEY "$IMAGE_FULL@$DIGEST"
+          cosign sign -y "$IMAGE_FULL@$DIGEST"
