@@ -94,7 +94,10 @@ jobs:
 
             buildah config --port 80 --port 443 ${{ env.IMAGE_NAME }}
             buildah config --cmd '["angie", "-g", "daemon off;"]' ${{ env.IMAGE_NAME }}
-            buildah commit ${{ env.IMAGE_NAME }} angie:latest
+            for tag in ${{ steps.metadata.outputs.tags }}; do
+              buildah commit ${{ env.IMAGE_NAME }} angie:$tag
+            done
+
 
       # Rechunk is a script that we use on Universal Blue to make sure there isnt a single huge layer when your image gets published.
       # This does not make your image faster to download, just provides better resumability and fixes a few errors.
